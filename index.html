@@ -1,269 +1,709 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Monopoly Money Manager</title>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ธนาคารเศรษฐี · Monopoly Bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <style>
-body {
-  margin:0;
-  font-family:sans-serif;
-  background:#0f172a;
-  color:white;
-}
+  :root{
+    --color-bg: #F2EAD3;
+    --color-bg-deep: #E8DFC0;
+    --color-ink: #0B3D2E;
+    --color-ink-soft: #2C5745;
+    --color-gold: #C9A227;
+    --color-gold-soft: #E4C761;
+    --color-brick: #A63D40;
+    --color-blue: #3B6E8F;
+    --color-card: #FFFDF7;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'IBM Plex Sans Thai', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --radius: 14px;
+    --shadow: 0 4px 14px rgba(11,61,46,0.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 10% 8%, rgba(201,162,39,0.10), transparent 40%),
+      radial-gradient(circle at 92% 90%, rgba(11,61,46,0.08), transparent 45%),
+      var(--color-bg);
+    color:var(--color-ink);
+    font-family:var(--font-body);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:var(--font-display); margin:0; letter-spacing:.2px;}
+  .mono{font-family:var(--font-mono);}
+  button{font-family:inherit; cursor:pointer;}
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible{
+    outline:3px solid var(--color-blue); outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;}
+  }
 
-.container { padding:16px; }
+  /* ---------- Guilloché corner ornament (signature element) ---------- */
+  .banknote-corner{position:relative; overflow:hidden;}
+  .banknote-corner::before, .banknote-corner::after{
+    content:""; position:absolute; width:46px; height:46px; pointer-events:none;
+    background-image:
+      repeating-radial-gradient(circle at 0 0, transparent 0, transparent 2px, rgba(11,61,46,0.16) 2.4px, transparent 3px, transparent 6px);
+    opacity:.55;
+  }
+  .banknote-corner::before{top:-6px; left:-6px;}
+  .banknote-corner::after{bottom:-6px; right:-6px; transform:rotate(180deg);}
 
-input, button {
-  padding:10px;
-  border-radius:8px;
-  border:none;
-}
+  /* ---------- Shared layout ---------- */
+  .view{display:none; min-height:100vh;}
+  .view.active{display:block;}
+  .wrap{max-width:640px; margin:0 auto; padding:24px 18px 80px;}
 
-button {
-  cursor:pointer;
-  font-weight:bold;
-}
+  /* ---------- Lobby ---------- */
+  #lobby-view .wrap{padding-top:48px;}
+  .lobby-header{text-align:center; margin-bottom:28px;}
+  .lobby-header .eyebrow{
+    display:inline-block; font-family:var(--font-mono); font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--color-gold); background:var(--color-ink);
+    padding:5px 12px; border-radius:999px; margin-bottom:14px;
+  }
+  .lobby-header h1{font-size:34px; color:var(--color-ink); line-height:1.15;}
+  .lobby-header p{margin:8px 0 0; color:var(--color-ink-soft); font-size:15px;}
 
-.grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-  gap:10px;
-}
+  .lobby-card{
+    background:var(--color-card); border:1px solid rgba(11,61,46,0.12);
+    border-radius:20px; padding:28px 22px; box-shadow:var(--shadow);
+  }
+  .field{margin-bottom:22px;}
+  .field label{display:block; font-weight:600; font-size:14px; margin-bottom:9px; color:var(--color-ink);}
+  .field input[type=text]{
+    width:100%; padding:13px 14px; border-radius:10px; border:1.5px solid rgba(11,61,46,0.22);
+    font-size:16px; background:#fff; color:var(--color-ink);
+  }
+  .field input[type=text]:focus{border-color:var(--color-blue);}
 
-.card {
-  padding:12px;
-  border-radius:12px;
-  position:relative;
-}
+  .swatches{display:flex; flex-wrap:wrap; gap:10px;}
+  .swatch{
+    width:38px; height:38px; border-radius:50%; border:3px solid transparent;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12); position:relative;
+  }
+  .swatch.selected{border-color:var(--color-ink); box-shadow:0 0 0 3px var(--color-gold-soft);}
 
-.toast {
-  position:fixed;
-  top:20px;
-  right:20px;
-  background:#111;
-  padding:12px;
-  border-radius:8px;
-  opacity:0.9;
-  margin-top:10px;
-}
+  .role-options{display:flex; gap:12px;}
+  .role-btn{
+    flex:1; padding:16px 10px; border-radius:12px; border:1.5px solid rgba(11,61,46,0.22);
+    background:#fff; text-align:center; font-weight:600; font-size:14px; color:var(--color-ink);
+    display:flex; flex-direction:column; align-items:center; gap:6px; transition:.15s;
+  }
+  .role-btn .ic{font-size:24px;}
+  .role-btn.selected{border-color:var(--color-ink); background:var(--color-bg-deep); box-shadow:0 0 0 3px var(--color-gold-soft);}
+  .role-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .role-btn .note{font-size:11px; font-weight:400; color:var(--color-brick);}
 
-.hidden { display:none; }
+  .cta{
+    width:100%; padding:15px; border-radius:12px; border:none; margin-top:6px;
+    background:var(--color-ink); color:var(--color-gold-soft); font-weight:700; font-size:16px;
+    letter-spacing:.3px;
+  }
+  .cta:disabled{opacity:.45; cursor:not-allowed;}
+  .cta:not(:disabled):hover{background:var(--color-ink-soft);}
+  .form-error{color:var(--color-brick); font-size:13px; margin-top:10px; min-height:16px;}
 
-.header {
-  display:flex;
-  justify-content:space-between;
-  margin-bottom:10px;
-}
+  /* ---------- Game header ---------- */
+  .game-header{
+    background:var(--color-ink); color:var(--color-bg); padding:18px 18px 22px;
+    border-bottom:4px solid var(--color-gold);
+  }
+  .game-header .inner{max-width:640px; margin:0 auto; display:flex; justify-content:space-between; align-items:flex-end;}
+  .game-header .who .name{font-family:var(--font-display); font-size:22px; font-weight:600;}
+  .game-header .who .role{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--color-gold-soft); margin-top:2px;}
+  .game-header .balance{text-align:right;}
+  .game-header .balance .lbl{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:rgba(242,234,211,0.65);}
+  .game-header .balance .amt{font-family:var(--font-mono); font-size:30px; font-weight:700; color:var(--color-gold-soft);}
+  .leave-link{
+    background:none; border:none; color:rgba(242,234,211,0.55); font-size:12px; text-decoration:underline;
+    padding:0; margin-top:6px;
+  }
+
+  .section-title{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--color-ink-soft); margin:26px 0 12px; font-weight:600;}
+
+  /* ---------- Player grid ---------- */
+  .players-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media (max-width:420px){ .players-grid{grid-template-columns:1fr;} }
+
+  .player-card{
+    background:var(--color-card); border-radius:16px; padding:16px 14px 14px;
+    box-shadow:var(--shadow); border-left:6px solid var(--pc, var(--color-gold));
+    position:relative; cursor:pointer; transition:transform .12s;
+  }
+  .player-card:hover{transform:translateY(-2px);}
+  .player-card.me{cursor:default;}
+  .player-card .top-row{display:flex; justify-content:space-between; align-items:flex-start;}
+  .player-card .pname{font-weight:700; font-size:15px; color:var(--color-ink);}
+  .player-card .prole{font-size:11px; color:var(--color-ink-soft); margin-top:2px;}
+  .player-card .eye-toggle{
+    background:none; border:none; font-size:15px; opacity:.55; padding:2px;
+  }
+  .player-card .pmoney{
+    font-family:var(--font-mono); font-size:22px; font-weight:700; margin-top:12px; color:var(--color-ink);
+  }
+  .player-card .pmoney.hidden-amt{color:var(--color-ink-soft); font-size:14px; font-weight:500;}
+  .player-card .go-btn{
+    margin-top:10px; width:100%; padding:9px 6px; border-radius:9px; border:1.5px solid var(--color-gold);
+    background:var(--color-gold-soft); color:var(--color-ink); font-weight:700; font-size:12.5px;
+  }
+  .player-card .go-btn:active{transform:scale(.97);}
+  .me-badge{
+    position:absolute; top:-8px; right:10px; background:var(--color-blue); color:#fff;
+    font-size:10px; padding:3px 9px; border-radius:999px; letter-spacing:.06em; text-transform:uppercase;
+  }
+
+  /* ---------- Tax panel ---------- */
+  .tax-panel{
+    background:var(--color-card); border-radius:16px; padding:18px 16px; box-shadow:var(--shadow);
+    border-top:4px solid var(--color-brick);
+  }
+  .tax-panel h3{font-size:16px; margin-bottom:4px;}
+  .tax-panel p{margin:0 0 14px; font-size:13px; color:var(--color-ink-soft);}
+  .tax-row{display:flex; gap:10px;}
+  .tax-row input{
+    flex:1; padding:12px 12px; border-radius:10px; border:1.5px solid rgba(11,61,46,0.22);
+    font-family:var(--font-mono); font-size:16px;
+  }
+  .tax-row button{
+    padding:0 20px; border-radius:10px; border:none; background:var(--color-brick); color:#fff; font-weight:700; font-size:14px;
+  }
+  .tax-row button:disabled{opacity:.4;}
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(11,61,46,0.45); display:none;
+    align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .modal-backdrop.active{display:flex;}
+  @media (min-width:520px){ .modal-backdrop{align-items:center;} }
+  .modal{
+    background:var(--color-card); width:100%; max-width:420px; border-radius:20px 20px 0 0;
+    padding:24px 20px 28px; box-shadow:0 -6px 24px rgba(0,0,0,0.2);
+  }
+  @media (min-width:520px){ .modal{border-radius:20px;} }
+  .modal h3{font-size:19px; margin-bottom:4px;}
+  .modal .to-line{font-size:13px; color:var(--color-ink-soft); margin-bottom:16px;}
+  .modal input{
+    width:100%; padding:13px 14px; border-radius:10px; border:1.5px solid rgba(11,61,46,0.22);
+    font-family:var(--font-mono); font-size:18px; margin-bottom:14px;
+  }
+  .modal-actions{display:flex; gap:10px;}
+  .modal-actions button{flex:1; padding:13px; border-radius:10px; border:none; font-weight:700; font-size:14px;}
+  .btn-confirm{background:var(--color-blue); color:#fff;}
+  .btn-confirm:disabled{opacity:.4;}
+  .btn-cancel{background:transparent; border:1.5px solid rgba(11,61,46,0.22) !important; color:var(--color-ink);}
+
+  /* ---------- Toast ---------- */
+  #toast-stack{
+    position:fixed; top:14px; right:14px; left:14px; z-index:100;
+    display:flex; flex-direction:column; align-items:flex-end; gap:8px; pointer-events:none;
+  }
+  @media (min-width:480px){ #toast-stack{left:auto; width:320px;} }
+  .toast{
+    background:var(--color-ink); color:var(--color-bg); padding:12px 16px; border-radius:11px;
+    font-size:13.5px; font-weight:500; box-shadow:0 6px 18px rgba(0,0,0,0.25);
+    border-left:4px solid var(--color-gold); max-width:100%;
+    animation:toast-in .25s ease-out;
+  }
+  @keyframes toast-in{ from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);} }
+  .toast.leaving{animation:toast-out .25s ease-in forwards;}
+  @keyframes toast-out{ to{opacity:0; transform:translateX(30px);} }
+
+  .empty-note{font-size:13px; color:var(--color-ink-soft); text-align:center; padding:20px 0;}
+  .config-warning{
+    background:#fff3cd; border:1px solid #e0c264; color:#6b4f00; font-size:12.5px;
+    padding:10px 14px; border-radius:10px; margin-bottom:18px; text-align:center;
+  }
 </style>
 </head>
-
 <body>
 
-<div id="setup" class="container">
-  <h2>ตั้งค่าตัวละคร</h2>
+<div id="toast-stack"></div>
 
-  <input id="name" placeholder="ชื่อผู้เล่น"/><br><br>
+<!-- ===================== LOBBY ===================== -->
+<div id="lobby-view" class="view active">
+  <div class="wrap">
+    <div class="lobby-header">
+      <span class="eyebrow">Monopoly · ธนาคารเกม</span>
+      <h1>ตั้งค่าตัวละครของคุณ</h1>
+      <p>กรอกชื่อ เลือกสี และเลือกบทบาทก่อนเข้าห้อง</p>
+    </div>
 
-  <label>เลือกสี:</label><br>
-  <input type="color" id="color" value="#ff0000"><br><br>
+    <div id="config-warning" class="config-warning" style="display:none;">
+      ⚠️ ยังไม่ได้ใส่ SUPABASE_URL / SUPABASE_KEY ในโค้ด — แก้ในส่วนต้นของ &lt;script&gt; ก่อนใช้งานจริง
+    </div>
 
-  <label>เลือกบทบาท:</label><br>
-  <select id="role">
-    <option value="player">👤 Player</option>
-    <option value="banker">👑 Banker</option>
-  </select><br><br>
+    <div class="lobby-card banknote-corner">
+      <div class="field">
+        <label for="name-input">ชื่อผู้เล่น</label>
+        <input id="name-input" type="text" maxlength="20" placeholder="เช่น ต้น, มายด์, บอย...">
+      </div>
 
-  <button onclick="joinGame()">เข้าสู่เกม</button>
+      <div class="field">
+        <label>สีประจำตัว</label>
+        <div id="swatches" class="swatches"></div>
+      </div>
+
+      <div class="field">
+        <label>บทบาทในเกม</label>
+        <div class="role-options">
+          <button type="button" class="role-btn" data-role="player">
+            <span class="ic">👤</span> ผู้เล่นธรรมดา
+          </button>
+          <button type="button" class="role-btn" data-role="banker" id="banker-btn">
+            <span class="ic">👑</span> นายธนาคาร
+            <span class="note" id="banker-note" style="display:none;">มีคนเป็นแล้ว</span>
+          </button>
+        </div>
+      </div>
+
+      <button id="join-btn" class="cta" disabled>เข้าสู่เกม</button>
+      <div id="form-error" class="form-error"></div>
+    </div>
+  </div>
 </div>
 
-<div id="game" class="container hidden">
-
-  <div class="header">
-    <div id="me"></div>
-    <button onclick="toggleHide()">👁️ ซ่อนเงิน</button>
+<!-- ===================== GAME ===================== -->
+<div id="game-view" class="view">
+  <div class="game-header">
+    <div class="inner">
+      <div class="who">
+        <div class="name" id="me-name">—</div>
+        <div class="role" id="me-role">—</div>
+        <button class="leave-link" id="leave-btn">ออกจากห้อง</button>
+      </div>
+      <div class="balance">
+        <div class="lbl">ยอดคงเหลือ</div>
+        <div class="amt mono" id="me-balance">$0</div>
+      </div>
+    </div>
   </div>
 
-  <h3>ผู้เล่นทั้งหมด</h3>
-  <div id="players" class="grid"></div>
+  <div class="wrap">
+    <div class="section-title">ผู้เล่นทั้งหมด</div>
+    <div id="players-grid" class="players-grid"></div>
 
-  <h3>จ่ายภาษี</h3>
-  <input id="tax" placeholder="จำนวนเงิน"/>
-  <button onclick="payTax()">จ่ายภาษี</button>
+    <div class="section-title">จ่ายภาษี / ค่าปรับ</div>
+    <div class="tax-panel banknote-corner">
+      <h3>💸 Custom Tax</h3>
+      <p>กรอกจำนวนเงินที่ต้องจ่ายเข้ากองกลาง (ธนาคาร)</p>
+      <div class="tax-row">
+        <input id="tax-input" type="number" min="1" placeholder="จำนวนเงิน">
+        <button id="tax-btn">จ่ายภาษี</button>
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- ===================== TRANSFER MODAL ===================== -->
+<div id="transfer-backdrop" class="modal-backdrop">
+  <div class="modal banknote-corner">
+    <h3>โอนเงินให้เพื่อน</h3>
+    <div class="to-line">โอนให้ <strong id="transfer-to-name">—</strong></div>
+    <input id="transfer-amount" type="number" min="1" placeholder="จำนวนเงิน" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="transfer-cancel">ยกเลิก</button>
+      <button class="btn-confirm" id="transfer-confirm" disabled>ยืนยันการโอน</button>
+    </div>
+  </div>
 </div>
 
 <script>
-const SUPABASE_URL = "https://eingzlyhkxtxxrehgeky.supabase.co";
-const SUPABASE_KEY = "sb_publishable_k4GcVzXO_cyy8L7MtOBZfg_JX0SzFWR";
+/* =========================================================
+   SUPABASE CONFIG — ใส่ค่าของคุณตรงนี้
+========================================================= */
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-let myId = null;
-let players = [];
-
-async function joinGame() {
-  const name = document.getElementById('name').value;
-  const color = document.getElementById('color').value;
-  const role = document.getElementById('role').value;
-
-  const { data: existingBanker } = await supabase
-    .from('players')
-    .select('*')
-    .eq('is_banker', true);
-
-  if (role === 'banker' && existingBanker.length > 0) {
-    alert("มี Banker แล้ว!");
-    return;
+let supabase = null;
+try {
+  if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes("YOUR_")) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } else {
+    document.getElementById('config-warning').style.display = 'block';
   }
-
-  const { data } = await supabase
-    .from('players')
-    .insert({
-      name,
-      color,
-      is_banker: role === 'banker'
-    })
-    .select()
-    .single();
-
-  myId = data.id;
-
-  document.getElementById('setup').classList.add('hidden');
-  document.getElementById('game').classList.remove('hidden');
-
-  listenRealtime();
-  loadPlayers();
+} catch (e) {
+  console.error("Supabase init failed:", e);
+  document.getElementById('config-warning').style.display = 'block';
 }
 
-async function loadPlayers() {
-  const { data } = await supabase.from('players').select('*');
-  players = data;
-  render();
+/* ---------------- constants ---------------- */
+const STARTING_MONEY = 1500;
+const COLORS = ["#A63D40","#3B6E8F","#3F7D4F","#C9A227","#7E5AA2","#D97757","#2C7A87","#B85C8A","#5B4636","#1E1E1E"];
+const STORAGE_KEY = "monopoly_player_id";
+
+/* ---------------- state ---------------- */
+let selectedColor = null;
+let selectedRole = null;
+let players = {};          // id -> row (live cache)
+let me = null;              // my row
+let transferTargetId = null;
+let lastLocalChangeAt = 0;  // suppress duplicate auto-toast right after our own action
+
+/* ============ TOAST ============ */
+function showToast(msg){
+  const stack = document.getElementById('toast-stack');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(()=>{
+    el.classList.add('leaving');
+    setTimeout(()=> el.remove(), 250);
+  }, 3000);
 }
 
-function render() {
-  const container = document.getElementById('players');
-  container.innerHTML = "";
+/* ============ helpers ============ */
+function fmtMoney(n){ return "$" + Number(n).toLocaleString('en-US'); }
 
-  players.forEach(p => {
-    const div = document.createElement('div');
-    div.className = "card";
-    div.style.background = p.color;
+function animateMoney(el, from, to){
+  const dur = 500, start = performance.now();
+  function step(t){
+    const p = Math.min(1, (t - start) / dur);
+    const val = Math.round(from + (to - from) * p);
+    el.textContent = fmtMoney(val);
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
 
-    let moneyText = p.hide_balance ? "💰 ???" : "$" + p.money;
-
-    div.innerHTML = `
-      <b>${p.name}</b><br>
-      ${p.is_banker ? "👑 Banker" : "👤 Player"}<br>
-      ${moneyText}
-    `;
-
-    div.onclick = () => transferPrompt(p);
-
-    if (isMeBanker() && !p.is_banker) {
-      const btn = document.createElement('button');
-      btn.innerText = "+$200";
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        giveMoney(p.id, 200);
-      };
-      div.appendChild(btn);
-    }
-
-    container.appendChild(div);
+/* =========================================================
+   LOBBY
+========================================================= */
+function buildSwatches(){
+  const wrap = document.getElementById('swatches');
+  COLORS.forEach(c=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch';
+    b.style.background = c;
+    b.setAttribute('aria-label', 'เลือกสี ' + c);
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('selected'));
+      b.classList.add('selected');
+      selectedColor = c;
+      updateJoinState();
+    });
+    wrap.appendChild(b);
   });
-
-  const me = players.find(p => p.id === myId);
-  if (me) {
-    document.getElementById('me').innerText =
-      `${me.name} (${me.is_banker ? 'Banker' : 'Player'}) $${me.money}`;
-  }
 }
 
-function isMeBanker() {
-  const me = players.find(p => p.id === myId);
-  return me?.is_banker;
+async function refreshBankerAvailability(){
+  const bankerBtn = document.getElementById('banker-btn');
+  const note = document.getElementById('banker-note');
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('players').select('id').eq('is_banker', true).limit(1);
+    if (error) throw error;
+    const taken = data && data.length > 0;
+    bankerBtn.disabled = taken;
+    note.style.display = taken ? 'block' : 'none';
+    if (taken && selectedRole === 'banker'){
+      selectedRole = null;
+      bankerBtn.classList.remove('selected');
+    }
+  } catch(e){ console.error(e); }
 }
 
-async function giveMoney(targetId, amount) {
-  const target = players.find(p => p.id === targetId);
-  await supabase
-    .from('players')
-    .update({ money: target.money + amount })
-    .eq('id', targetId);
+document.querySelectorAll('.role-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if (btn.disabled) return;
+    document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedRole = btn.dataset.role;
+    updateJoinState();
+  });
+});
 
-  showToast(`🎉 ให้เงิน $${amount}`);
+document.getElementById('name-input').addEventListener('input', updateJoinState);
+
+function updateJoinState(){
+  const name = document.getElementById('name-input').value.trim();
+  document.getElementById('join-btn').disabled = !(name && selectedColor && selectedRole);
 }
 
-async function transferPrompt(target) {
-  if (target.id === myId) return;
-
-  const amount = prompt(`โอนเงินให้ ${target.name}`);
-  if (!amount) return;
-
-  const me = players.find(p => p.id === myId);
-
-  if (me.money < amount) {
-    alert("เงินไม่พอ");
+document.getElementById('join-btn').addEventListener('click', async ()=>{
+  const errBox = document.getElementById('form-error');
+  errBox.textContent = '';
+  const name = document.getElementById('name-input').value.trim();
+  if (!supabase){
+    errBox.textContent = 'ยังไม่ได้ตั้งค่า Supabase — ดูคำเตือนด้านบน';
     return;
   }
-
-  await supabase.from('players').update({ money: me.money - amount }).eq('id', myId);
-  await supabase.from('players').update({ money: target.money + Number(amount) }).eq('id', target.id);
-
-  showToast(`💸 โอน ${amount} ให้ ${target.name}`);
-}
-
-async function payTax() {
-  const amount = document.getElementById('tax').value;
-  const me = players.find(p => p.id === myId);
-
-  if (me.money < amount) return alert("เงินไม่พอ");
-
-  await supabase.from('players')
-    .update({ money: me.money - Number(amount) })
-    .eq('id', myId);
-
-  showToast(`💸 จ่ายภาษี $${amount}`);
-}
-
-async function toggleHide() {
-  const me = players.find(p => p.id === myId);
-
-  await supabase.from('players')
-    .update({ hide_balance: !me.hide_balance })
-    .eq('id', myId);
-}
-
-function listenRealtime() {
-  supabase.channel('players')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'players' },
-      payload => {
-        loadPlayers();
-
-        if (payload.new?.id === myId) {
-          const diff = payload.new.money - payload.old.money;
-          if (diff > 0) showToast(`🎉 +$${diff}`);
-          if (diff < 0) showToast(`💸 -$${Math.abs(diff)}`);
-        }
+  document.getElementById('join-btn').disabled = true;
+  try {
+    if (selectedRole === 'banker'){
+      const { data: existing } = await supabase.from('players').select('id').eq('is_banker', true).limit(1);
+      if (existing && existing.length){
+        errBox.textContent = 'มีนายธนาคารอยู่แล้ว กรุณาเลือกผู้เล่นธรรมดา';
+        await refreshBankerAvailability();
+        document.getElementById('join-btn').disabled = false;
+        return;
       }
-    )
+    }
+    const { data, error } = await supabase.from('players').insert({
+      name, color: selectedColor, is_banker: selectedRole === 'banker',
+      money: STARTING_MONEY, money_visible: true
+    }).select().single();
+    if (error) throw error;
+    localStorage.setItem(STORAGE_KEY, data.id);
+    await enterGame(data.id);
+  } catch(e){
+    console.error(e);
+    errBox.textContent = 'เข้าห้องไม่สำเร็จ: ' + (e.message || 'ลองใหม่อีกครั้ง');
+    document.getElementById('join-btn').disabled = false;
+  }
+});
+
+/* =========================================================
+   GAME VIEW
+========================================================= */
+async function enterGame(playerId){
+  document.getElementById('lobby-view').classList.remove('active');
+  document.getElementById('game-view').classList.add('active');
+
+  const { data, error } = await supabase.from('players').select('*').eq('id', playerId).single();
+  if (error || !data){
+    localStorage.removeItem(STORAGE_KEY);
+    document.getElementById('game-view').classList.remove('active');
+    document.getElementById('lobby-view').classList.add('active');
+    return;
+  }
+  me = data;
+  await loadAllPlayers();
+  subscribeRealtime();
+  renderHeader();
+  renderGrid();
+}
+
+async function loadAllPlayers(){
+  const { data, error } = await supabase.from('players').select('*').order('created_at', { ascending: true });
+  if (error){ console.error(error); return; }
+  players = {};
+  data.forEach(p => players[p.id] = p);
+  me = players[me.id] || me;
+}
+
+function renderHeader(){
+  document.getElementById('me-name').textContent = me.name;
+  document.getElementById('me-role').textContent = me.is_banker ? '👑 นายธนาคาร' : '👤 ผู้เล่น';
+  document.getElementById('me-balance').textContent = fmtMoney(me.money);
+}
+
+function renderGrid(){
+  const grid = document.getElementById('players-grid');
+  grid.innerHTML = '';
+  const list = Object.values(players).sort((a,b)=> (a.id === me.id ? -1 : b.id === me.id ? 1 : 0));
+  if (!list.length){
+    grid.innerHTML = '<div class="empty-note">ยังไม่มีผู้เล่นในห้อง</div>';
+    return;
+  }
+  list.forEach(p => grid.appendChild(renderPlayerCard(p)));
+}
+
+function renderPlayerCard(p){
+  const isMe = p.id === me.id;
+  const card = document.createElement('div');
+  card.className = 'player-card banknote-corner' + (isMe ? ' me' : '');
+  card.style.setProperty('--pc', p.color);
+  card.dataset.playerId = p.id;
+
+  const canSeeMoney = isMe || p.money_visible;
+  const moneyHtml = canSeeMoney
+    ? `<div class="pmoney mono" data-money-el>${fmtMoney(p.money)}</div>`
+    : `<div class="pmoney hidden-amt">•••• ซ่อนยอด</div>`;
+
+  card.innerHTML = `
+    ${isMe ? '<span class="me-badge">คุณ</span>' : ''}
+    <div class="top-row">
+      <div>
+        <div class="pname">${escapeHtml(p.name)}</div>
+        <div class="prole">${p.is_banker ? '👑 นายธนาคาร' : '👤 ผู้เล่น'}</div>
+      </div>
+      ${isMe ? `<button class="eye-toggle" data-toggle-visibility aria-label="สลับการมองเห็นยอดเงิน">${p.money_visible ? '👁️' : '🙈'}</button>` : ''}
+    </div>
+    ${moneyHtml}
+    ${(me.is_banker) ? `<button class="go-btn" data-pass-go>+ $200 (Pass GO)</button>` : ''}
+  `;
+
+  if (isMe){
+    const eyeBtn = card.querySelector('[data-toggle-visibility]');
+    if (eyeBtn) eyeBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); toggleVisibility(); });
+  } else {
+    card.addEventListener('click', (ev)=>{
+      if (ev.target.closest('[data-pass-go]')) return;
+      openTransferModal(p);
+    });
+  }
+
+  const goBtn = card.querySelector('[data-pass-go]');
+  if (goBtn){
+    goBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); passGo(p); });
+  }
+
+  return card;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------------- actions ---------------- */
+async function toggleVisibility(){
+  const newVal = !me.money_visible;
+  lastLocalChangeAt = 0; // visibility toggle isn't a money change, no suppression needed
+  const { error } = await supabase.from('players').update({ money_visible: newVal }).eq('id', me.id);
+  if (error){ console.error(error); return; }
+  me.money_visible = newVal;
+  players[me.id] = me;
+  renderGrid();
+}
+
+async function passGo(target){
+  const newMoney = target.money + 200;
+  const { error } = await supabase.from('players').update({ money: newMoney }).eq('id', target.id);
+  if (error){ console.error(error); showToast('ทำรายการไม่สำเร็จ'); return; }
+}
+
+function openTransferModal(target){
+  transferTargetId = target.id;
+  document.getElementById('transfer-to-name').textContent = target.name;
+  document.getElementById('transfer-amount').value = '';
+  document.getElementById('transfer-confirm').disabled = true;
+  document.getElementById('transfer-backdrop').classList.add('active');
+  setTimeout(()=> document.getElementById('transfer-amount').focus(), 50);
+}
+function closeTransferModal(){
+  document.getElementById('transfer-backdrop').classList.remove('active');
+  transferTargetId = null;
+}
+document.getElementById('transfer-cancel').addEventListener('click', closeTransferModal);
+document.getElementById('transfer-backdrop').addEventListener('click', (e)=>{
+  if (e.target.id === 'transfer-backdrop') closeTransferModal();
+});
+document.getElementById('transfer-amount').addEventListener('input', (e)=>{
+  const v = Number(e.target.value);
+  document.getElementById('transfer-confirm').disabled = !(v > 0);
+});
+
+document.getElementById('transfer-confirm').addEventListener('click', async ()=>{
+  const amount = Number(document.getElementById('transfer-amount').value);
+  if (!amount || amount <= 0 || !transferTargetId) return;
+  const target = players[transferTargetId];
+  if (!target) return;
+
+  document.getElementById('transfer-confirm').disabled = true;
+  try {
+    lastLocalChangeAt = Date.now();
+    const { error: e1 } = await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
+    if (e1) throw e1;
+    const { error: e2 } = await supabase.from('players').update({ money: target.money + amount }).eq('id', target.id);
+    if (e2) throw e2;
+
+    me.money -= amount;
+    players[me.id] = me;
+    renderHeader();
+    renderGrid();
+    showToast(`💸 โอนเงิน ${fmtMoney(amount)} ให้ ${target.name} สำเร็จ`);
+    closeTransferModal();
+  } catch(e){
+    console.error(e);
+    showToast('โอนเงินไม่สำเร็จ ลองใหม่อีกครั้ง');
+    document.getElementById('transfer-confirm').disabled = false;
+  }
+});
+
+/* ---------------- tax ---------------- */
+document.getElementById('tax-input').addEventListener('input', (e)=>{
+  document.getElementById('tax-btn').disabled = !(Number(e.target.value) > 0);
+});
+document.getElementById('tax-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('tax-input');
+  const amount = Number(input.value);
+  if (!amount || amount <= 0) return;
+  const btn = document.getElementById('tax-btn');
+  btn.disabled = true;
+  try {
+    lastLocalChangeAt = Date.now();
+    const { error } = await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
+    if (error) throw error;
+    me.money -= amount;
+    players[me.id] = me;
+    renderHeader();
+    renderGrid();
+    showToast(`💸 คุณจ่ายเงิน ${fmtMoney(amount)}`);
+    input.value = '';
+  } catch(e){
+    console.error(e);
+    showToast('จ่ายภาษีไม่สำเร็จ');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------------- leave ---------------- */
+document.getElementById('leave-btn').addEventListener('click', ()=>{
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+});
+
+/* =========================================================
+   REALTIME
+========================================================= */
+function subscribeRealtime(){
+  supabase.channel('players-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload)=>{
+      if (payload.eventType === 'DELETE'){
+        delete players[payload.old.id];
+        if (me && payload.old.id === me.id){ /* current player removed */ }
+        renderGrid();
+        return;
+      }
+      const row = payload.new;
+      const prev = players[row.id];
+      players[row.id] = row;
+
+      if (me && row.id === me.id){
+        const suppressed = (Date.now() - lastLocalChangeAt) < 2500;
+        if (prev && prev.money !== row.money && !suppressed){
+          const diff = row.money - prev.money;
+          showToast(diff > 0 ? `🎉 คุณได้รับเงิน ${fmtMoney(diff)}` : `💸 คุณจ่ายเงิน ${fmtMoney(Math.abs(diff))}`);
+        }
+        const balEl = document.getElementById('me-balance');
+        if (prev && prev.money !== row.money) animateMoney(balEl, prev.money, row.money);
+        else balEl.textContent = fmtMoney(row.money);
+        me = row;
+        document.getElementById('me-role').textContent = me.is_banker ? '👑 นายธนาคาร' : '👤 ผู้เล่น';
+      } else if (!prev && me){
+        showToast(`👋 ${row.name} เข้าร่วมห้องแล้ว`);
+      }
+      renderGrid();
+    })
     .subscribe();
 }
 
-function showToast(msg) {
-  const t = document.createElement('div');
-  t.className = 'toast';
-  t.innerText = msg;
-  document.body.appendChild(t);
+/* =========================================================
+   BOOT
+========================================================= */
+(async function boot(){
+  buildSwatches();
+  await refreshBankerAvailability();
 
-  setTimeout(() => t.remove(), 3000);
-}
+  const savedId = localStorage.getItem(STORAGE_KEY);
+  if (savedId && supabase){
+    await enterGame(savedId);
+  }
+})();
 </script>
-
 </body>
 </html>

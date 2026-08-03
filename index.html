@@ -131,7 +131,7 @@
   .game-header .balance{text-align:right;}
   .game-header .balance .lbl{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:rgba(242,234,211,0.65);}
   .game-header .balance .amt{font-family:var(--font-mono); font-size:24px; font-weight:700; color:var(--color-gold-soft);}
-  .header-actions{display:flex; gap:12px; margin-top:4px;}
+  .header-actions{display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:4px; max-width:180px;}
   .leave-link{
     background:none; border:none; color:rgba(242,234,211,0.55); font-size:11px; text-decoration:underline;
     padding:0;
@@ -324,6 +324,7 @@
         <div class="name" id="me-name">—</div>
         <div class="role" id="me-role">—</div>
         <div class="header-actions">
+          <button class="leave-link" id="recovery-btn">🔑 รหัสกู้คืน</button>
           <button class="leave-link" id="leave-btn">ออกจากห้อง</button>
           <button class="leave-link danger" id="restart-btn" style="display:none;">⚠️ รีสตาร์ทเกม</button>
         </div>
@@ -374,6 +375,19 @@
     <div class="modal-actions">
       <button class="btn-cancel" id="restart-cancel">ยกเลิก</button>
       <button class="btn-confirm btn-danger" id="restart-confirm-btn" disabled>รีสตาร์ทเกม</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RECOVERY LINK MODAL ===================== -->
+<div id="recovery-backdrop" class="modal-backdrop">
+  <div class="modal banknote-corner">
+    <h3>🔑 รหัสกู้คืนของคุณ</h3>
+    <div class="to-line">บันทึกลิงก์นี้ไว้ (เช่น ส่งให้ตัวเองใน Line) หากพลาดกดออกจากห้อง เปิดลิงก์นี้อีกครั้งบนเครื่องเดิมเพื่อกลับเข้ามาเป็นตัวเดิมทันที</div>
+    <input id="recovery-link-input" type="text" readonly>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="recovery-close">ปิด</button>
+      <button class="btn-confirm" id="recovery-copy">คัดลอกลิงก์</button>
     </div>
   </div>
 </div>
@@ -575,6 +589,8 @@ async function enterGame(playerId){
     localStorage.removeItem(STORAGE_KEY);
     document.getElementById('game-view').classList.remove('active');
     document.getElementById('lobby-view').classList.add('active');
+    document.getElementById('form-error').textContent = 'ไม่พบผู้เล่นนี้ในห้อง (อาจถูกลบหรือรีสตาร์ทไปแล้ว) กรุณาตั้งค่าตัวละครใหม่';
+    await refreshBankerAvailability();
     return;
   }
   me = data;
@@ -596,7 +612,7 @@ function renderHeader(){
   document.getElementById('me-name').textContent = me.name;
   document.getElementById('me-role').textContent = me.is_banker ? '👑 นายธนาคาร' : '👤 ผู้เล่น';
   document.getElementById('me-balance').textContent = fmtMoney(me.money);
-  document.getElementById('restart-btn').style.display = me.is_banker ? 'inline-block' : 'none';
+  document.getElementById('restart-btn').style.display = 'inline-block';
 }
 
 function renderGrid(){
@@ -748,15 +764,45 @@ document.getElementById('tax-btn').addEventListener('click', async ()=>{
   }
 });
 
+/* ---------------- recovery link (prevents getting stranded) ---------------- */
+function buildRecoveryLink(){
+  return `${location.origin}${location.pathname}?pid=${me.id}`;
+}
+document.getElementById('recovery-btn').addEventListener('click', ()=>{
+  document.getElementById('recovery-link-input').value = buildRecoveryLink();
+  document.getElementById('recovery-backdrop').classList.add('active');
+});
+document.getElementById('recovery-close').addEventListener('click', ()=>{
+  document.getElementById('recovery-backdrop').classList.remove('active');
+});
+document.getElementById('recovery-backdrop').addEventListener('click', (e)=>{
+  if (e.target.id === 'recovery-backdrop') document.getElementById('recovery-backdrop').classList.remove('active');
+});
+document.getElementById('recovery-copy').addEventListener('click', async ()=>{
+  const input = document.getElementById('recovery-link-input');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showToast('📋 คัดลอกลิงก์แล้ว');
+  } catch(e){
+    input.select();
+    document.execCommand('copy');
+    showToast('📋 คัดลอกลิงก์แล้ว');
+  }
+});
+
 /* ---------------- leave ---------------- */
 document.getElementById('leave-btn').addEventListener('click', ()=>{
+  const warn = me.is_banker
+    ? 'คุณเป็นแบงค์เกอร์ — ถ้าออกจากห้องจะกลับเข้ามาสวมบทนี้ไม่ได้อีกจนกว่าจะใช้ลิงก์กู้คืน (ปุ่ม "🔑 รหัสกู้คืน") ต้องการออกจากห้องจริงหรือไม่?'
+    : 'ต้องการออกจากห้องจริงหรือไม่? หากไม่ได้บันทึกลิงก์กู้คืนไว้ อาจต้องเริ่มเป็นผู้เล่นใหม่';
+  if (!confirm(warn)) return;
   localStorage.removeItem(STORAGE_KEY);
   location.reload();
 });
 
 /* ---------------- restart game (banker only) ---------------- */
 function openRestartModal(){
-  if (!me || !me.is_banker) return;
+  if (!me) return;
   document.getElementById('restart-confirm-input').value = '';
   document.getElementById('restart-confirm-btn').disabled = true;
   document.getElementById('restart-backdrop').classList.add('active');
@@ -774,7 +820,7 @@ document.getElementById('restart-confirm-input').addEventListener('input', (e)=>
   document.getElementById('restart-confirm-btn').disabled = e.target.value !== 'Restart';
 });
 document.getElementById('restart-confirm-btn').addEventListener('click', async ()=>{
-  if (!me || !me.is_banker) return;
+  if (!me) return;
   if (document.getElementById('restart-confirm-input').value !== 'Restart') return;
   const btn = document.getElementById('restart-confirm-btn');
   btn.disabled = true;
@@ -845,6 +891,15 @@ function subscribeRealtime(){
 (async function boot(){
   buildSwatches();
   await refreshBankerAvailability();
+
+  // Recovery link support: open the site with ?pid=<uuid> to relink this device
+  // to an existing player row (e.g. after accidentally leaving the room).
+  const urlParams = new URLSearchParams(location.search);
+  const recoverId = urlParams.get('pid');
+  if (recoverId){
+    localStorage.setItem(STORAGE_KEY, recoverId);
+    history.replaceState({}, '', location.pathname);
+  }
 
   const savedId = localStorage.getItem(STORAGE_KEY);
   if (savedId && sb){

@@ -1,337 +1,269 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monopoly Bank</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root {
-      --primary: #2d6a4f;
-      --bg: #f8f9fa;
-      --card-bg: #ffffff;
-      --text: #1d3557;
-    }
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 15px;
-    }
-    .container { max-width: 600px; margin: 0 auto; }
-    h1, h2 { text-align: center; color: var(--primary); margin-bottom: 10px; }
-    
-    .card {
-      background: var(--card-bg);
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-      margin-bottom: 15px;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Monopoly Money Manager</title>
 
-    /* Form Styles */
-    label { display: block; font-weight: bold; margin-top: 10px; }
-    input[type="text"], input[type="number"], select {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-    .color-options {
-      display: flex;
-      gap: 10px;
-      margin: 10px 0;
-    }
-    .color-box {
-      width: 35px;
-      height: 35px;
-      border-radius: 50%;
-      cursor: pointer;
-      border: 3px solid transparent;
-    }
-    .color-box.selected { border-color: #333; transform: scale(1.1); }
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    /* Players Grid */
-    .players-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .player-card {
-      border-radius: 10px;
-      padding: 12px;
-      text-align: center;
-      cursor: pointer;
-      transition: 0.2s;
-      color: white;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    }
-    .player-card.selected-target { border: 4px solid #ffb703; }
-    .role-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 12px;
-      background: rgba(0,0,0,0.3);
-      font-size: 0.8rem;
-    }
+<style>
+body {
+  margin:0;
+  font-family:sans-serif;
+  background:#0f172a;
+  color:white;
+}
 
-    button {
-      width: 100%;
-      padding: 12px;
-      background-color: var(--primary);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 10px;
-      font-size: 1rem;
-    }
-    button.btn-go { background-color: #2b9348; margin-top: 5px; }
-    button.btn-tax { background-color: #e63946; }
+.container { padding:16px; }
 
-    /* Toast Notification */
-    #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
-    .toast {
-      background: #333; color: white; padding: 12px 20px;
-      border-radius: 8px; margin-bottom: 10px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-  </style>
+input, button {
+  padding:10px;
+  border-radius:8px;
+  border:none;
+}
+
+button {
+  cursor:pointer;
+  font-weight:bold;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;
+}
+
+.card {
+  padding:12px;
+  border-radius:12px;
+  position:relative;
+}
+
+.toast {
+  position:fixed;
+  top:20px;
+  right:20px;
+  background:#111;
+  padding:12px;
+  border-radius:8px;
+  opacity:0.9;
+  margin-top:10px;
+}
+
+.hidden { display:none; }
+
+.header {
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+</style>
 </head>
+
 <body>
 
-<div id="toast-container"></div>
+<div id="setup" class="container">
+  <h2>ตั้งค่าตัวละคร</h2>
 
-<div class="container">
-  <h1>🎩 Monopoly Bank</h1>
+  <input id="name" placeholder="ชื่อผู้เล่น"/><br><br>
 
-  <!-- ================= 1. หน้าตั้งค่าตัวละคร (LOBBY / SETUP) ================= -->
-  <div id="setup-screen" class="card">
-    <h2>เข้าร่วมเกม</h2>
-    
-    <label>ชื่อผู้เล่น:</label>
-    <input type="text" id="player-name-input" placeholder="พิมพ์ชื่อของคุณ...">
+  <label>เลือกสี:</label><br>
+  <input type="color" id="color" value="#ff0000"><br><br>
 
-    <label>เลือกสีประจำเป็นตัว:</label>
-    <div class="color-options">
-      <div class="color-box selected" style="background: #e63946;" onclick="selectColor(this, '#e63946')"></div>
-      <div class="color-box" style="background: #457b9d;" onclick="selectColor(this, '#457b9d')"></div>
-      <div class="color-box" style="background: #2a9d8f;" onclick="selectColor(this, '#2a9d8f')"></div>
-      <div class="color-box" style="background: #f4a261;" onclick="selectColor(this, '#f4a261')"></div>
-      <div class="color-box" style="background: #9d4edd;" onclick="selectColor(this, '#9d4edd')"></div>
-    </div>
+  <label>เลือกบทบาท:</label><br>
+  <select id="role">
+    <option value="player">👤 Player</option>
+    <option value="banker">👑 Banker</option>
+  </select><br><br>
 
-    <label>เลือกบทบาท / ตำแหน่ง:</label>
-    <select id="role-select">
-      <option value="player">👤 ผู้เล่น (Player)</option>
-      <option value="banker" id="banker-option">👑 นายธนาคาร (Banker - มีได้คนเดียว)</option>
-    </select>
+  <button onclick="joinGame()">เข้าสู่เกม</button>
+</div>
 
-    <button onclick="joinGame()">เข้าสู่เกม 🚀</button>
+<div id="game" class="container hidden">
+
+  <div class="header">
+    <div id="me"></div>
+    <button onclick="toggleHide()">👁️ ซ่อนเงิน</button>
   </div>
 
-  <!-- ================= 2. หน้าจอเล่นเกม (MAIN GAME) ================= -->
-  <div id="game-screen" style="display:none;">
-    
-    <div class="card" style="background: #e9ecef;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>คุณคือ: <b id="my-name">-</b> <span id="my-role-badge" class="role-badge"></span></div>
-        <div>เงินของคุณ: <b id="my-money" style="color:#2d6a4f; font-size:1.2rem;">$0</b></div>
-      </div>
-    </div>
+  <h3>ผู้เล่นทั้งหมด</h3>
+  <div id="players" class="grid"></div>
 
-    <!-- Players Grid -->
-    <div class="card">
-      <h3>👥 ผู้เล่นทั้งหมด (กดที่การ์ดเพื่อนเพื่อโอนเงิน)</h3>
-      <div class="players-grid" id="players-list"></div>
-    </div>
+  <h3>จ่ายภาษี</h3>
+  <input id="tax" placeholder="จำนวนเงิน"/>
+  <button onclick="payTax()">จ่ายภาษี</button>
 
-    <!-- Action Transfer -->
-    <div class="card" id="action-box" style="display:none;">
-      <h3 id="target-name">โอนเงิน</h3>
-      <input type="number" id="amount" placeholder="กรอกจำนวนเงิน ($)" min="1">
-      <button onclick="transferMoney()">💸 ยืนยันการโอนเงิน</button>
-    </div>
-
-    <!-- Custom Tax -->
-    <div class="card">
-      <h3>🏛️ จ่ายภาษี (เข้า Bank)</h3>
-      <input type="number" id="tax-amount" placeholder="ระบุจำนวนเงินภาษี ($)" min="1">
-      <button class="btn-tax" onclick="payTax()">🔻 จ่ายภาษี</button>
-    </div>
-  </div>
 </div>
 
 <script>
-  // 1. ตั้งค่า Supabase
-  const SUPABASE_URL = "https://eingzlyhkxtxxrehgeky.supabase.co"; 
-  const SUPABASE_KEY = "sb_publishable_k4GcVzXO_cyy8L7MtOBZfg_JX0SzFWR"; 
-  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_URL = "https://eingzlyhkxtxxrehgeky.supabase.co";
+const SUPABASE_KEY = "sb_publishable_k4GcVzXO_cyy8L7MtOBZfg_JX0SzFWR";
 
-  let players = [];
-  let myPlayerId = null;
-  let selectedColor = '#e63946';
-  let selectedTargetId = null;
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  window.onload = async () => {
-    await fetchPlayers();
-    checkBankerExists();
-    listenRealtime();
-  };
+let myId = null;
+let players = [];
 
-  function selectColor(el, color) {
-    document.querySelectorAll('.color-box').forEach(b => b.classList.remove('selected'));
-    el.classList.add('selected');
-    selectedColor = color;
+async function joinGame() {
+  const name = document.getElementById('name').value;
+  const color = document.getElementById('color').value;
+  const role = document.getElementById('role').value;
+
+  const { data: existingBanker } = await supabase
+    .from('players')
+    .select('*')
+    .eq('is_banker', true);
+
+  if (role === 'banker' && existingBanker.length > 0) {
+    alert("มี Banker แล้ว!");
+    return;
   }
 
-  // เช็คว่ามีคนเป็น Banker หรือยัง ถ้ามีแล้วให้ปิดตัวเลือก
-  function checkBankerExists() {
-    const hasBanker = players.some(p => p.is_banker === true);
-    const bankerOpt = document.getElementById('banker-option');
-    if (hasBanker) {
-      bankerOpt.disabled = true;
-      bankerOpt.innerText = "👑 นายธนาคาร (มีคนเป็นแล้ว)";
-    } else {
-      bankerOpt.disabled = false;
-      bankerOpt.innerText = "👑 นายธนาคาร (Banker - มีได้คนเดียว)";
+  const { data } = await supabase
+    .from('players')
+    .insert({
+      name,
+      color,
+      is_banker: role === 'banker'
+    })
+    .select()
+    .single();
+
+  myId = data.id;
+
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('game').classList.remove('hidden');
+
+  listenRealtime();
+  loadPlayers();
+}
+
+async function loadPlayers() {
+  const { data } = await supabase.from('players').select('*');
+  players = data;
+  render();
+}
+
+function render() {
+  const container = document.getElementById('players');
+  container.innerHTML = "";
+
+  players.forEach(p => {
+    const div = document.createElement('div');
+    div.className = "card";
+    div.style.background = p.color;
+
+    let moneyText = p.hide_balance ? "💰 ???" : "$" + p.money;
+
+    div.innerHTML = `
+      <b>${p.name}</b><br>
+      ${p.is_banker ? "👑 Banker" : "👤 Player"}<br>
+      ${moneyText}
+    `;
+
+    div.onclick = () => transferPrompt(p);
+
+    if (isMeBanker() && !p.is_banker) {
+      const btn = document.createElement('button');
+      btn.innerText = "+$200";
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        giveMoney(p.id, 200);
+      };
+      div.appendChild(btn);
     }
+
+    container.appendChild(div);
+  });
+
+  const me = players.find(p => p.id === myId);
+  if (me) {
+    document.getElementById('me').innerText =
+      `${me.name} (${me.is_banker ? 'Banker' : 'Player'}) $${me.money}`;
+  }
+}
+
+function isMeBanker() {
+  const me = players.find(p => p.id === myId);
+  return me?.is_banker;
+}
+
+async function giveMoney(targetId, amount) {
+  const target = players.find(p => p.id === targetId);
+  await supabase
+    .from('players')
+    .update({ money: target.money + amount })
+    .eq('id', targetId);
+
+  showToast(`🎉 ให้เงิน $${amount}`);
+}
+
+async function transferPrompt(target) {
+  if (target.id === myId) return;
+
+  const amount = prompt(`โอนเงินให้ ${target.name}`);
+  if (!amount) return;
+
+  const me = players.find(p => p.id === myId);
+
+  if (me.money < amount) {
+    alert("เงินไม่พอ");
+    return;
   }
 
-  // สมัคร/เข้าสู่เกม
-  async function joinGame() {
-    const name = document.getElementById('player-name-input').value.trim();
-    const role = document.getElementById('role-select').value;
-    const isBanker = (role === 'banker');
+  await supabase.from('players').update({ money: me.money - amount }).eq('id', myId);
+  await supabase.from('players').update({ money: target.money + Number(amount) }).eq('id', target.id);
 
-    if (!name) return alert("กรุณากรอกชื่อผู้เล่นก่อนครับ");
+  showToast(`💸 โอน ${amount} ให้ ${target.name}`);
+}
 
-    // บันทึกเข้า Supabase (เริ่มต้นที่เงิน $1500)
-    const { data, error } = await supabase.from('players').insert([
-      { name: name, money: 1500, color: selectedColor, is_banker: isBanker }
-    ]).select();
+async function payTax() {
+  const amount = document.getElementById('tax').value;
+  const me = players.find(p => p.id === myId);
 
-    if (error) {
-      alert("เกิดข้อผิดพลาดในการเข้าร่วมเกม: " + error.message);
-    } else if (data && data.length > 0) {
-      myPlayerId = data[0].id;
-      // สลับหน้าจอไปที่หน้าเล่นเกม
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('game-screen').style.display = 'block';
-      fetchPlayers();
-    }
-  }
+  if (me.money < amount) return alert("เงินไม่พอ");
 
-  // Toast Notification
-  function showToast(message) {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerText = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
+  await supabase.from('players')
+    .update({ money: me.money - Number(amount) })
+    .eq('id', myId);
 
-  async function fetchPlayers() {
-    const { data } = await supabase.from('players').select('*').order('id');
-    if (data) {
-      players = data;
-      checkBankerExists();
-      renderUI();
-    }
-  }
+  showToast(`💸 จ่ายภาษี $${amount}`);
+}
 
-  function listenRealtime() {
-    supabase.channel('public:players')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
-        if (payload.eventType === 'UPDATE') {
-          const updated = payload.new;
-          const old = players.find(p => p.id === updated.id);
-          if (old && updated.money !== old.money && updated.id === myPlayerId) {
-            const diff = updated.money - old.money;
-            showToast(diff > 0 ? `🎉 ได้รับเงิน $${diff}` : `💸 จ่ายเงิน $${Math.abs(diff)}`);
-          }
+async function toggleHide() {
+  const me = players.find(p => p.id === myId);
+
+  await supabase.from('players')
+    .update({ hide_balance: !me.hide_balance })
+    .eq('id', myId);
+}
+
+function listenRealtime() {
+  supabase.channel('players')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'players' },
+      payload => {
+        loadPlayers();
+
+        if (payload.new?.id === myId) {
+          const diff = payload.new.money - payload.old.money;
+          if (diff > 0) showToast(`🎉 +$${diff}`);
+          if (diff < 0) showToast(`💸 -$${Math.abs(diff)}`);
         }
-        fetchPlayers();
-      })
-      .subscribe();
-  }
+      }
+    )
+    .subscribe();
+}
 
-  function renderUI() {
-    const me = players.find(p => p.id === myPlayerId);
-    if (me) {
-      document.getElementById('my-name').innerText = me.name;
-      document.getElementById('my-money').innerText = `$${me.money}`;
-      document.getElementById('my-role-badge').innerText = me.is_banker ? '👑 Banker' : '👤 Player';
-    }
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerText = msg;
+  document.body.appendChild(t);
 
-    const list = document.getElementById('players-list');
-    list.innerHTML = players.map(p => `
-      <div class="player-card ${p.id === selectedTargetId ? 'selected-target' : ''}" 
-           style="background-color: ${p.color || '#2d6a4f'};" 
-           onclick="selectTarget(${p.id})">
-        <div style="font-size: 1.5rem;">${p.is_banker ? '👑' : '👤'}</div>
-        <b>${p.name}</b>
-        <div style="font-size: 1.2rem; font-weight: bold; margin: 5px 0;">$${p.money}</div>
-        
-        <!-- ปุ่มพิเศษสำหรับคนที่เป็น Banker เท่านั้นที่จะกดจ่าย $200 ให้เพื่อนได้ -->
-        ${(me && me.is_banker) ? `<button class="btn-go" onclick="passGo(event, ${p.id})">+ $200 (Go)</button>` : ''}
-      </div>
-    `).join('');
-  }
-
-  function selectTarget(id) {
-    if (id === myPlayerId) return alert("คุณไม่สามารถโอนเงินให้ตัวเองได้ครับ");
-    selectedTargetId = id;
-    const target = players.find(p => p.id === id);
-    document.getElementById('target-name').innerText = `โอนเงินให้: ${target.name}`;
-    document.getElementById('action-box').style.display = 'block';
-    renderUI();
-  }
-
-  async function transferMoney() {
-    const amount = parseInt(document.getElementById('amount').value);
-    const me = players.find(p => p.id === myPlayerId);
-    const target = players.find(p => p.id === selectedTargetId);
-
-    if (!amount || amount <= 0) return alert("กรุณากรอกจำนวนเงินให้ถูกต้อง");
-    if (me.money < amount) return alert("เงินของคุณไม่พอครับ!");
-
-    await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
-    await supabase.from('players').update({ money: target.money + amount }).eq('id', target.id);
-
-    document.getElementById('amount').value = '';
-    document.getElementById('action-box').style.display = 'none';
-    selectedTargetId = null;
-    showToast(`โอนเงิน $${amount} ให้ ${target.name} สำเร็จ!`);
-  }
-
-  async function passGo(event, targetId) {
-    event.stopPropagation();
-    const target = players.find(p => p.id === targetId);
-    await supabase.from('players').update({ money: target.money + 200 }).eq('id', target.id);
-    showToast(`โอนค่าผ่าน Go $200 ให้ ${target.name} แล้ว`);
-  }
-
-  async function payTax() {
-    const amount = parseInt(document.getElementById('tax-amount').value);
-    const me = players.find(p => p.id === myPlayerId);
-
-    if (!amount || amount <= 0) return alert("กรุณากรอกจำนวนภาษีให้ถูกต้อง");
-    if (me.money < amount) return alert("เงินของคุณไม่พอจ่ายภาษีครับ!");
-
-    await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
-    document.getElementById('tax-amount').value = '';
-    showToast(`จ่ายภาษี $${amount} เรียบร้อยแล้ว`);
-  }
+  setTimeout(() => t.remove(), 3000);
+}
 </script>
+
 </body>
 </html>

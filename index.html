@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monopoly Bank</title>
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; margin: 0; padding: 0; }
+    body { background: #111827; color: #fff; padding: 20px; max-width: 450px; margin: 0 auto; }
+    h1 { text-align: center; color: #38bdf8; margin-bottom: 20px; }
+    .card { background: #1f2937; padding: 16px; border-radius: 12px; margin-bottom: 15px; }
+    input, select, button { width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; border: none; font-size: 1rem; }
+    input, select { background: #374151; color: white; }
+    button { background: #0284c7; color: white; font-weight: bold; cursor: pointer; }
+    .balance { font-size: 2.5rem; color: #4ade80; text-align: center; font-weight: bold; margin: 10px 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .player-box { background: #374151; padding: 10px; border-radius: 8px; text-align: center; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>🎲 Monopoly Bank</h1>
+
+  <!-- เข้าสู่ระบบ -->
+  <div id="join-card" class="card">
+    <h2>ระบุชื่อผู้เล่น</h2>
+    <input type="text" id="name-input" placeholder="ใส่ชื่อของคุณ...">
+    <button onclick="joinGame()">เข้าสู่เกม ($1,500)</button>
+  </div>
+
+  <!-- แผงควบคุมเงิน -->
+  <div id="game-card" class="card hidden">
+    <h2 id="user-display">ยอดเงินของคุณ</h2>
+    <div class="balance" id="my-balance">$0</div>
+
+    <div style="display:flex; gap:8px; margin-bottom:15px;">
+      <button style="background:#16a34a;" onclick="updateMyBalance(200)">+ $200 (ผ่าน START)</button>
+      <button style="background:#dc2626;" onclick="updateMyBalance(-50)">- $50 (จ่ายภาษี)</button>
+    </div>
+
+    <h3>โอนเงินให้คนอื่น</h3>
+    <select id="target-select"></select>
+    <input type="number" id="amount-input" placeholder="จำนวนเงิน ($)">
+    <button onclick="transferMoney()">ส่งเงิน</button>
+  </div>
+
+  <!-- ตารางสรุปเงินทุกคน -->
+  <div id="players-card" class="card hidden">
+    <h3>ยอดเงินผู้เล่นทั้งหมด</h3>
+    <div class="grid" id="players-list" style="margin-top:10px;"></div>
+  </div>
+
+  <script>
+    // ⚠️ นำค่าจาก Supabase มาวางตรงนี้
+    const SUPABASE_URL = "https://eingzlyhkxtxxrehgeky.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_k4GcVzXO_cyy8L7MtOBZfg_JX0SzFWR";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let myPlayerId = localStorage.getItem('monopoly_player_id');
+    let allPlayers = [];
+
+    // เมื่อเปิดหน้าเว็บ
+    window.onload = async () => {
+      fetchPlayers();
+      subscribeRealtime();
+
+      if (myPlayerId) {
+        showGameUI();
+      }
+    };
+
+    // เข้าร่วมเกม
+    async function joinGame() {
+      const name = document.getElementById('name-input').value.trim();
+      if (!name) return alert('กรุณาใส่ชื่อก่อนครับ');
+
+      const { data, error } = await supabaseClient
+        .from('players')
+        .insert([{ name: name, balance: 1500 }])
+        .select();
+
+      if (error) return alert('เกิดข้อผิดพลาด: ' + error.message);
+
+      myPlayerId = data[0].id;
+      localStorage.setItem('monopoly_player_id', myPlayerId);
+      showGameUI();
+    }
+
+    // ดึงข้อมูลผู้เล่นทั้งหมด
+    async function fetchPlayers() {
+      const { data } = await supabaseClient.from('players').select('*');
+      if (data) {
+        allPlayers = data;
+        renderUI();
+      }
+    }
+
+    // อัปเดตเงินตัวเอง (ปุ่มลัด +200 / -50)
+    async function updateMyBalance(changeAmount) {
+      const me = allPlayers.find(p => p.id == myPlayerId);
+      if (!me) return;
+
+      await supabaseClient
+        .from('players')
+        .update({ balance: me.balance + changeAmount })
+        .eq('id', myPlayerId);
+    }
+
+    // โอนเงิน
+    async function transferMoney() {
+      const targetId = document.getElementById('target-select').value;
+      const amount = parseInt(document.getElementById('amount-input').value);
+      
+      if (!amount || amount <= 0) return alert('ใส่จำนวนเงินที่ถูกต้อง');
+
+      const me = allPlayers.find(p => p.id == myPlayerId);
+      if (me.balance < amount) return alert('เงินของคุณไม่พอ!');
+
+      // หักเงินเรา
+      await supabaseClient
+        .from('players')
+        .update({ balance: me.balance - amount })
+        .eq('id', myPlayerId);
+
+      // เพิ่มเงินให้ปลายทาง (ถ้าไม่ใช่ธนาคาร)
+      if (targetId !== 'BANK') {
+        const target = allPlayers.find(p => p.id == targetId);
+        await supabaseClient
+          .from('players')
+          .update({ balance: target.balance + amount })
+          .eq('id', targetId);
+      }
+
+      document.getElementById('amount-input').value = '';
+    }
+
+    // ฟังการเปลี่ยนแปลงแบบ Realtime (เมื่อมีคนโอนเงิน เงินจะเปลี่ยนทันที)
+    function subscribeRealtime() {
+      supabaseClient
+        .channel('public:players')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {
+          fetchPlayers();
+        })
+        .subscribe();
+    }
+
+    // แสดงผลบนหน้าจอ
+    function renderUI() {
+      const listContainer = document.getElementById('players-list');
+      const selectTarget = document.getElementById('target-select');
+      
+      listContainer.innerHTML = '';
+      selectTarget.innerHTML = '<option value="BANK">🏛️ ธนาคารกลาง</option>';
+
+      allPlayers.forEach(p => {
+        if (p.id == myPlayerId) {
+          document.getElementById('my-balance').innerText = `$${p.balance.toLocaleString()}`;
+          document.getElementById('user-display').innerText = `👤 ${p.name}`;
+        } else {
+          selectTarget.innerHTML += `<option value="${p.id}">👤 ${p.name}</option>`;
+        }
+
+        listContainer.innerHTML += `
+          <div class="player-box">
+            <div style="font-size:0.85rem; color:#9ca3af;">${p.name}</div>
+            <div style="font-size:1.2rem; color:#4ade80; font-weight:bold;">$${p.balance.toLocaleString()}</div>
+          </div>
+        `;
+      });
+    }
+
+    function showGameUI() {
+      document.getElementById('join-card').classList.add('hidden');
+      document.getElementById('game-card').classList.remove('hidden');
+      document.getElementById('players-card').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>

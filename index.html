@@ -325,10 +325,10 @@
 const SUPABASE_URL = "https://eingzlyhkxtxxrehgeky.supabase.co";
 const SUPABASE_KEY = "sb_publishable_k4GcVzXO_cyy8L7MtOBZfg_JX0SzFWR";
 
-let supabase = null;
+let sb = null;
 try {
   if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes("YOUR_")) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   } else {
     document.getElementById('config-warning').style.display = 'block';
   }
@@ -401,9 +401,9 @@ function buildSwatches(){
 async function refreshBankerAvailability(){
   const bankerBtn = document.getElementById('banker-btn');
   const note = document.getElementById('banker-note');
-  if (!supabase) return;
+  if (!sb) return;
   try {
-    const { data, error } = await supabase.from('players').select('id').eq('is_banker', true).limit(1);
+    const { data, error } = await sb.from('players').select('id').eq('is_banker', true).limit(1);
     if (error) throw error;
     const taken = data && data.length > 0;
     bankerBtn.disabled = taken;
@@ -436,14 +436,14 @@ document.getElementById('join-btn').addEventListener('click', async ()=>{
   const errBox = document.getElementById('form-error');
   errBox.textContent = '';
   const name = document.getElementById('name-input').value.trim();
-  if (!supabase){
+  if (!sb){
     errBox.textContent = 'ยังไม่ได้ตั้งค่า Supabase — ดูคำเตือนด้านบน';
     return;
   }
   document.getElementById('join-btn').disabled = true;
   try {
     if (selectedRole === 'banker'){
-      const { data: existing } = await supabase.from('players').select('id').eq('is_banker', true).limit(1);
+      const { data: existing } = await sb.from('players').select('id').eq('is_banker', true).limit(1);
       if (existing && existing.length){
         errBox.textContent = 'มีนายธนาคารอยู่แล้ว กรุณาเลือกผู้เล่นธรรมดา';
         await refreshBankerAvailability();
@@ -451,7 +451,7 @@ document.getElementById('join-btn').addEventListener('click', async ()=>{
         return;
       }
     }
-    const { data, error } = await supabase.from('players').insert({
+    const { data, error } = await sb.from('players').insert({
       name, color: selectedColor, is_banker: selectedRole === 'banker',
       money: STARTING_MONEY, money_visible: true
     }).select().single();
@@ -472,7 +472,7 @@ async function enterGame(playerId){
   document.getElementById('lobby-view').classList.remove('active');
   document.getElementById('game-view').classList.add('active');
 
-  const { data, error } = await supabase.from('players').select('*').eq('id', playerId).single();
+  const { data, error } = await sb.from('players').select('*').eq('id', playerId).single();
   if (error || !data){
     localStorage.removeItem(STORAGE_KEY);
     document.getElementById('game-view').classList.remove('active');
@@ -487,7 +487,7 @@ async function enterGame(playerId){
 }
 
 async function loadAllPlayers(){
-  const { data, error } = await supabase.from('players').select('*').order('created_at', { ascending: true });
+  const { data, error } = await sb.from('players').select('*').order('created_at', { ascending: true });
   if (error){ console.error(error); return; }
   players = {};
   data.forEach(p => players[p.id] = p);
@@ -562,7 +562,7 @@ function escapeHtml(s){
 async function toggleVisibility(){
   const newVal = !me.money_visible;
   lastLocalChangeAt = 0; // visibility toggle isn't a money change, no suppression needed
-  const { error } = await supabase.from('players').update({ money_visible: newVal }).eq('id', me.id);
+  const { error } = await sb.from('players').update({ money_visible: newVal }).eq('id', me.id);
   if (error){ console.error(error); return; }
   me.money_visible = newVal;
   players[me.id] = me;
@@ -571,7 +571,7 @@ async function toggleVisibility(){
 
 async function passGo(target){
   const newMoney = target.money + 200;
-  const { error } = await supabase.from('players').update({ money: newMoney }).eq('id', target.id);
+  const { error } = await sb.from('players').update({ money: newMoney }).eq('id', target.id);
   if (error){ console.error(error); showToast('ทำรายการไม่สำเร็จ'); return; }
 }
 
@@ -605,9 +605,9 @@ document.getElementById('transfer-confirm').addEventListener('click', async ()=>
   document.getElementById('transfer-confirm').disabled = true;
   try {
     lastLocalChangeAt = Date.now();
-    const { error: e1 } = await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
+    const { error: e1 } = await sb.from('players').update({ money: me.money - amount }).eq('id', me.id);
     if (e1) throw e1;
-    const { error: e2 } = await supabase.from('players').update({ money: target.money + amount }).eq('id', target.id);
+    const { error: e2 } = await sb.from('players').update({ money: target.money + amount }).eq('id', target.id);
     if (e2) throw e2;
 
     me.money -= amount;
@@ -635,7 +635,7 @@ document.getElementById('tax-btn').addEventListener('click', async ()=>{
   btn.disabled = true;
   try {
     lastLocalChangeAt = Date.now();
-    const { error } = await supabase.from('players').update({ money: me.money - amount }).eq('id', me.id);
+    const { error } = await sb.from('players').update({ money: me.money - amount }).eq('id', me.id);
     if (error) throw error;
     me.money -= amount;
     players[me.id] = me;
@@ -661,7 +661,7 @@ document.getElementById('leave-btn').addEventListener('click', ()=>{
    REALTIME
 ========================================================= */
 function subscribeRealtime(){
-  supabase.channel('players-realtime')
+  sb.channel('players-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload)=>{
       if (payload.eventType === 'DELETE'){
         delete players[payload.old.id];
@@ -700,7 +700,7 @@ function subscribeRealtime(){
   await refreshBankerAvailability();
 
   const savedId = localStorage.getItem(STORAGE_KEY);
-  if (savedId && supabase){
+  if (savedId && sb){
     await enterGame(savedId);
   }
 })();

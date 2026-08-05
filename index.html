@@ -179,6 +179,11 @@
     background:var(--color-gold-soft); color:var(--color-ink); font-weight:700; font-size:10.5px; white-space:nowrap;
   }
   .player-row .go-btn:active{transform:scale(.95);}
+  .player-row .adj-btn{
+    flex:0 0 auto; padding:7px 8px; border-radius:8px; border:1.5px solid var(--color-blue);
+    background:#fff; color:var(--color-blue); font-weight:700; font-size:10.5px; white-space:nowrap;
+  }
+  .player-row .adj-btn:active{transform:scale(.95);}
   .me-badge{
     position:absolute; top:-7px; right:8px; background:var(--color-blue); color:#fff;
     font-size:9px; padding:2px 7px; border-radius:999px; letter-spacing:.06em; text-transform:uppercase;
@@ -261,6 +266,25 @@
   .warning-text{font-size:13px; color:var(--color-ink-soft); margin-bottom:14px; line-height:1.5;}
   .warning-text strong{color:var(--color-brick);}
 
+  .sign-toggle{display:flex; gap:8px; margin-bottom:14px;}
+  .sign-btn{
+    flex:1; padding:11px 8px; border-radius:10px; border:1.5px solid rgba(11,61,46,0.22);
+    background:#fff; font-weight:700; font-size:13.5px; color:var(--color-ink);
+  }
+  .sign-btn.selected{border-color:var(--color-ink); box-shadow:0 0 0 3px var(--color-gold-soft); background:var(--color-bg-deep);}
+
+  /* ---------- Existing-player rejoin list (lobby) ---------- */
+  #existing-players-wrap{margin-bottom:22px;}
+  .existing-player-item{
+    display:flex; align-items:center; gap:10px; padding:11px 13px; border-radius:11px;
+    background:#fff; border:1.5px solid rgba(11,61,46,0.15); border-left:5px solid var(--pc, var(--color-gold));
+    cursor:pointer; transition:transform .1s;
+  }
+  .existing-player-item:active{transform:scale(.98);}
+  .existing-player-item .epi-name{font-weight:700; font-size:13.5px; flex:1; color:var(--color-ink);}
+  .existing-player-item .epi-role{font-size:11px; color:var(--color-ink-soft);}
+  .existing-player-item .epi-cta{font-size:11px; color:var(--color-blue); font-weight:600; white-space:nowrap;}
+
   .empty-note{font-size:13px; color:var(--color-ink-soft); text-align:center; padding:20px 0;}
   .config-warning{
     background:#fff3cd; border:1px solid #e0c264; color:#6b4f00; font-size:12.5px;
@@ -284,6 +308,13 @@
 
     <div id="config-warning" class="config-warning" style="display:none;">
       ⚠️ ยังไม่ได้ใส่ SUPABASE_URL / SUPABASE_KEY ในโค้ด — แก้ในส่วนต้นของ &lt;script&gt; ก่อนใช้งานจริง
+    </div>
+
+    <div id="existing-players-wrap" style="display:none;">
+      <div class="lobby-card banknote-corner">
+        <label style="display:block;font-weight:600;font-size:14px;margin-bottom:10px;">มีตัวละครอยู่แล้วในห้องนี้? แตะเพื่อกลับเข้าเกมของคุณ</label>
+        <div id="existing-players-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
     </div>
 
     <div class="lobby-card banknote-corner">
@@ -388,6 +419,23 @@
     <div class="modal-actions">
       <button class="btn-cancel" id="recovery-close">ปิด</button>
       <button class="btn-confirm" id="recovery-copy">คัดลอกลิงก์</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== BANK ADJUST MODAL (Banker: free custom +/- for card draws) ===================== -->
+<div id="bank-adjust-backdrop" class="modal-backdrop">
+  <div class="modal banknote-corner">
+    <h3>🏦 ปรับยอดเงิน</h3>
+    <div class="to-line">สำหรับการ์ดจั่ว/เหตุการณ์พิเศษ — ปรับยอดให้ <strong id="adjust-to-name">—</strong></div>
+    <div class="sign-toggle">
+      <button type="button" class="sign-btn selected" data-sign="+">➕ เพิ่มเงิน</button>
+      <button type="button" class="sign-btn" data-sign="-">➖ หักเงิน</button>
+    </div>
+    <input id="adjust-amount" type="number" min="1" placeholder="จำนวนเงิน" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="adjust-cancel">ยกเลิก</button>
+      <button class="btn-confirm" id="adjust-confirm" disabled>ยืนยัน</button>
     </div>
   </div>
 </div>
@@ -513,16 +561,42 @@ function buildSwatches(){
 async function refreshBankerAvailability(){
   const bankerBtn = document.getElementById('banker-btn');
   const note = document.getElementById('banker-note');
+  const existingWrap = document.getElementById('existing-players-wrap');
+  const existingList = document.getElementById('existing-players-list');
   if (!sb) return;
   try {
-    const { data, error } = await sb.from('players').select('id').eq('is_banker', true).limit(1);
+    const { data, error } = await sb.from('players').select('*').order('created_at', { ascending: true });
     if (error) throw error;
-    const taken = data && data.length > 0;
+
+    const taken = data.some(p => p.is_banker);
     bankerBtn.disabled = taken;
     note.style.display = taken ? 'block' : 'none';
     if (taken && selectedRole === 'banker'){
       selectedRole = null;
       bankerBtn.classList.remove('selected');
+      updateJoinState();
+    }
+
+    existingList.innerHTML = '';
+    if (data.length){
+      existingWrap.style.display = 'block';
+      data.forEach(p=>{
+        const item = document.createElement('div');
+        item.className = 'existing-player-item';
+        item.style.setProperty('--pc', p.color);
+        item.innerHTML = `
+          <div class="epi-name">${escapeHtml(p.name)}</div>
+          <div class="epi-role">${p.is_banker ? '👑 แบงค์เกอร์' : '👤 ผู้เล่น'}</div>
+          <div class="epi-cta">เข้าเกม →</div>
+        `;
+        item.addEventListener('click', ()=>{
+          localStorage.setItem(STORAGE_KEY, p.id);
+          enterGame(p.id);
+        });
+        existingList.appendChild(item);
+      });
+    } else {
+      existingWrap.style.display = 'none';
     }
   } catch(e){ console.error(e); }
 }
@@ -646,7 +720,7 @@ function renderPlayerRow(p){
     </div>
     ${isMe ? `<button class="eye-toggle" data-toggle-visibility aria-label="สลับการมองเห็นยอดเงิน">${p.money_visible ? '👁️' : '🙈'}</button>` : ''}
     ${moneyHtml}
-    ${(me.is_banker) ? `<button class="go-btn" data-pass-go>+$200</button>` : ''}
+    ${(me.is_banker) ? `<button class="go-btn" data-pass-go>+200</button><button class="adj-btn" data-bank-adjust>✏️ ปรับ</button>` : ''}
   `;
 
   if (isMe){
@@ -654,7 +728,7 @@ function renderPlayerRow(p){
     if (eyeBtn) eyeBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); toggleVisibility(); });
   } else {
     row.addEventListener('click', (ev)=>{
-      if (ev.target.closest('[data-pass-go]')) return;
+      if (ev.target.closest('[data-pass-go]') || ev.target.closest('[data-bank-adjust]')) return;
       openTransferModal(p);
     });
   }
@@ -662,6 +736,10 @@ function renderPlayerRow(p){
   const goBtn = row.querySelector('[data-pass-go]');
   if (goBtn){
     goBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); passGo(p); });
+  }
+  const adjBtn = row.querySelector('[data-bank-adjust]');
+  if (adjBtn){
+    adjBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); openBankAdjustModal(p); });
   }
 
   return row;
@@ -687,6 +765,71 @@ async function passGo(target){
   const { error } = await sb.from('players').update({ money: newMoney }).eq('id', target.id);
   if (error){ console.error(error); showToast('ทำรายการไม่สำเร็จ'); return; }
 }
+
+/* ---------------- bank adjust (custom +/- amount, e.g. for card draws) ---------------- */
+let bankAdjustTargetId = null;
+let bankAdjustSign = '+';
+
+function openBankAdjustModal(target){
+  bankAdjustTargetId = target.id;
+  bankAdjustSign = '+';
+  document.querySelectorAll('#bank-adjust-backdrop [data-sign]').forEach(b=>{
+    b.classList.toggle('selected', b.dataset.sign === '+');
+  });
+  document.getElementById('adjust-to-name').textContent = target.name + (target.id === me.id ? ' (คุณ)' : '');
+  document.getElementById('adjust-amount').value = '';
+  document.getElementById('adjust-confirm').disabled = true;
+  document.getElementById('bank-adjust-backdrop').classList.add('active');
+  setTimeout(()=> document.getElementById('adjust-amount').focus(), 50);
+}
+function closeBankAdjustModal(){
+  document.getElementById('bank-adjust-backdrop').classList.remove('active');
+  bankAdjustTargetId = null;
+}
+document.getElementById('adjust-cancel').addEventListener('click', closeBankAdjustModal);
+document.getElementById('bank-adjust-backdrop').addEventListener('click', (e)=>{
+  if (e.target.id === 'bank-adjust-backdrop') closeBankAdjustModal();
+});
+document.querySelectorAll('#bank-adjust-backdrop [data-sign]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    bankAdjustSign = btn.dataset.sign;
+    document.querySelectorAll('#bank-adjust-backdrop [data-sign]').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+  });
+});
+document.getElementById('adjust-amount').addEventListener('input', (e)=>{
+  document.getElementById('adjust-confirm').disabled = !(Number(e.target.value) > 0);
+});
+document.getElementById('adjust-confirm').addEventListener('click', async ()=>{
+  const amount = Number(document.getElementById('adjust-amount').value);
+  if (!amount || amount <= 0 || !bankAdjustTargetId) return;
+  const target = players[bankAdjustTargetId];
+  if (!target) return;
+  const delta = bankAdjustSign === '+' ? amount : -amount;
+
+  document.getElementById('adjust-confirm').disabled = true;
+  try {
+    const isSelf = target.id === me.id;
+    if (isSelf) lastLocalChangeAt = Date.now();
+    const { error } = await sb.from('players').update({ money: target.money + delta }).eq('id', target.id);
+    if (error) throw error;
+
+    if (isSelf){
+      me.money += delta;
+      players[me.id] = me;
+      renderHeader();
+      renderGrid();
+      showMoneyPopup(delta > 0 ? 'receive' : 'pay', fmtMoney(Math.abs(delta)), delta > 0 ? 'ได้รับจากธนาคาร' : 'จ่ายให้ธนาคาร');
+      if (delta > 0) playCoinSound();
+    }
+    showToast(`✅ ${delta > 0 ? 'เพิ่ม' : 'หัก'}เงิน ${fmtMoney(Math.abs(delta))} ${delta > 0 ? 'ให้' : 'จาก'} ${target.name} แล้ว`);
+    closeBankAdjustModal();
+  } catch(e){
+    console.error(e);
+    showToast('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง');
+    document.getElementById('adjust-confirm').disabled = false;
+  }
+});
 
 function openTransferModal(target){
   transferTargetId = target.id;

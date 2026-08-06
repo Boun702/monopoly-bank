@@ -1134,9 +1134,14 @@ document.getElementById('restart-confirm-btn').addEventListener('click', async (
   const btn = document.getElementById('restart-confirm-btn');
   btn.disabled = true;
   try {
-    await logTransaction({ type:'restart', from_name: me.name });
+    const bankerName = me.name;
+    // Wipe old history first so the next game starts with a clean log —
+    // otherwise it would keep growing forever across restarts.
+    const { error: txError } = await sb.from('transactions').delete().not('id', 'is', null);
+    if (txError) throw txError;
     const { error } = await sb.from('players').delete().not('id', 'is', null);
     if (error) throw error;
+    await logTransaction({ type:'restart', from_name: bankerName });
     // Every client (including this banker) receives a realtime DELETE for their
     // own row and gets kicked back to the lobby automatically — see handleKickedOut().
   } catch(e){

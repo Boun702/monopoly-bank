@@ -199,7 +199,7 @@
   .tax-row{display:flex; gap:8px;}
   .tax-row input{
     flex:1; padding:10px 12px; border-radius:10px; border:1.5px solid rgba(11,61,46,0.22);
-    font-family:var(--font-mono); font-size:15px;
+    font-family:var(--font-mono); font-size:16px;
   }
   .tax-row button{
     padding:0 18px; border-radius:10px; border:none; background:var(--color-brick); color:#fff; font-weight:700; font-size:13px;
@@ -215,7 +215,8 @@
   @media (min-width:520px){ .modal-backdrop{align-items:center;} }
   .modal{
     background:var(--color-card); width:100%; max-width:420px; border-radius:20px 20px 0 0;
-    padding:24px 20px 28px; box-shadow:0 -6px 24px rgba(0,0,0,0.2);
+    padding:20px 20px 24px; box-shadow:0 -6px 24px rgba(0,0,0,0.2);
+    max-height:85vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
   }
   @media (min-width:520px){ .modal{border-radius:20px;} }
   .modal h3{font-size:19px; margin-bottom:4px;}
@@ -272,6 +273,14 @@
     background:#fff; font-weight:700; font-size:13.5px; color:var(--color-ink);
   }
   .sign-btn.selected{border-color:var(--color-ink); box-shadow:0 0 0 3px var(--color-gold-soft); background:var(--color-bg-deep);}
+
+  .quick-chips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .chip{
+    padding:9px 15px; border-radius:999px; border:1.5px solid var(--color-gold);
+    background:var(--color-gold-soft); color:var(--color-ink); font-weight:700; font-size:13.5px;
+  }
+  .chip:active{transform:scale(.93);}
+  .chip:disabled{opacity:.5;}
 
   /* ---------- Existing-player rejoin list (lobby) ---------- */
   #existing-players-wrap{margin-bottom:22px;}
@@ -375,9 +384,15 @@
   <div class="game-footer">
     <div class="tax-panel banknote-corner">
       <h3>💸 Custom Tax</h3>
-      <p>กรอกจำนวนเงินที่ต้องจ่ายเข้ากองกลาง (ธนาคาร)</p>
+      <p>กรอกจำนวนเงินที่ต้องจ่ายเข้ากองกลาง (ธนาคาร) หรือแตะยอดด่วน</p>
+      <div class="quick-chips" id="tax-chips">
+        <button type="button" class="chip" data-amt="50">$50</button>
+        <button type="button" class="chip" data-amt="100">$100</button>
+        <button type="button" class="chip" data-amt="200">$200</button>
+        <button type="button" class="chip" data-amt="500">$500</button>
+      </div>
       <div class="tax-row">
-        <input id="tax-input" type="number" min="1" placeholder="จำนวนเงิน">
+        <input id="tax-input" type="number" inputmode="numeric" min="1" placeholder="หรือกรอกจำนวนเอง">
         <button id="tax-btn">จ่ายภาษี</button>
       </div>
     </div>
@@ -388,8 +403,15 @@
 <div id="transfer-backdrop" class="modal-backdrop">
   <div class="modal banknote-corner">
     <h3>โอนเงินให้เพื่อน</h3>
-    <div class="to-line">โอนให้ <strong id="transfer-to-name">—</strong></div>
-    <input id="transfer-amount" type="number" min="1" placeholder="จำนวนเงิน" autocomplete="off">
+    <div class="to-line">โอนให้ <strong id="transfer-to-name">—</strong> — แตะยอดด่วนเพื่อโอนทันที</div>
+    <div class="quick-chips" id="transfer-chips">
+      <button type="button" class="chip" data-amt="50">$50</button>
+      <button type="button" class="chip" data-amt="100">$100</button>
+      <button type="button" class="chip" data-amt="200">$200</button>
+      <button type="button" class="chip" data-amt="500">$500</button>
+      <button type="button" class="chip" data-amt="1000">$1,000</button>
+    </div>
+    <input id="transfer-amount" type="number" inputmode="numeric" min="1" placeholder="หรือกรอกจำนวนเอง" autocomplete="off">
     <div class="modal-actions">
       <button class="btn-cancel" id="transfer-cancel">ยกเลิก</button>
       <button class="btn-confirm" id="transfer-confirm" disabled>ยืนยันการโอน</button>
@@ -432,7 +454,14 @@
       <button type="button" class="sign-btn selected" data-sign="+">➕ เพิ่มเงิน</button>
       <button type="button" class="sign-btn" data-sign="-">➖ หักเงิน</button>
     </div>
-    <input id="adjust-amount" type="number" min="1" placeholder="จำนวนเงิน" autocomplete="off">
+    <div class="quick-chips" id="adjust-chips">
+      <button type="button" class="chip" data-amt="50">$50</button>
+      <button type="button" class="chip" data-amt="100">$100</button>
+      <button type="button" class="chip" data-amt="200">$200</button>
+      <button type="button" class="chip" data-amt="500">$500</button>
+      <button type="button" class="chip" data-amt="1000">$1,000</button>
+    </div>
+    <input id="adjust-amount" type="number" inputmode="numeric" min="1" placeholder="หรือกรอกจำนวนเอง" autocomplete="off">
     <div class="modal-actions">
       <button class="btn-cancel" id="adjust-cancel">ยกเลิก</button>
       <button class="btn-confirm" id="adjust-confirm" disabled>ยืนยัน</button>
@@ -525,6 +554,12 @@ function playCoinSound(){
 
 /* ============ helpers ============ */
 function fmtMoney(n){ return "$" + Number(n).toLocaleString('en-US'); }
+
+function setModalBusy(backdropId, busy){
+  const el = document.getElementById(backdropId);
+  if (!el) return;
+  el.querySelectorAll('.btn-confirm, .chip').forEach(b=>{ b.disabled = busy; });
+}
 
 function animateMoney(el, from, to){
   const dur = 500, start = performance.now();
@@ -800,14 +835,14 @@ document.querySelectorAll('#bank-adjust-backdrop [data-sign]').forEach(btn=>{
 document.getElementById('adjust-amount').addEventListener('input', (e)=>{
   document.getElementById('adjust-confirm').disabled = !(Number(e.target.value) > 0);
 });
-document.getElementById('adjust-confirm').addEventListener('click', async ()=>{
-  const amount = Number(document.getElementById('adjust-amount').value);
+
+async function performBankAdjust(amount){
   if (!amount || amount <= 0 || !bankAdjustTargetId) return;
   const target = players[bankAdjustTargetId];
   if (!target) return;
   const delta = bankAdjustSign === '+' ? amount : -amount;
 
-  document.getElementById('adjust-confirm').disabled = true;
+  setModalBusy('bank-adjust-backdrop', true);
   try {
     const isSelf = target.id === me.id;
     if (isSelf) lastLocalChangeAt = Date.now();
@@ -827,8 +862,15 @@ document.getElementById('adjust-confirm').addEventListener('click', async ()=>{
   } catch(e){
     console.error(e);
     showToast('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง');
-    document.getElementById('adjust-confirm').disabled = false;
+  } finally {
+    setModalBusy('bank-adjust-backdrop', false);
   }
+}
+document.getElementById('adjust-confirm').addEventListener('click', ()=>{
+  performBankAdjust(Number(document.getElementById('adjust-amount').value));
+});
+document.querySelectorAll('#adjust-chips [data-amt]').forEach(btn=>{
+  btn.addEventListener('click', ()=> performBankAdjust(Number(btn.dataset.amt)));
 });
 
 function openTransferModal(target){
@@ -852,13 +894,12 @@ document.getElementById('transfer-amount').addEventListener('input', (e)=>{
   document.getElementById('transfer-confirm').disabled = !(v > 0);
 });
 
-document.getElementById('transfer-confirm').addEventListener('click', async ()=>{
-  const amount = Number(document.getElementById('transfer-amount').value);
+async function performTransfer(amount){
   if (!amount || amount <= 0 || !transferTargetId) return;
   const target = players[transferTargetId];
   if (!target) return;
 
-  document.getElementById('transfer-confirm').disabled = true;
+  setModalBusy('transfer-backdrop', true);
   try {
     lastLocalChangeAt = Date.now();
     const { error: e1 } = await sb.from('players').update({ money: me.money - amount }).eq('id', me.id);
@@ -875,20 +916,27 @@ document.getElementById('transfer-confirm').addEventListener('click', async ()=>
   } catch(e){
     console.error(e);
     showToast('โอนเงินไม่สำเร็จ ลองใหม่อีกครั้ง');
-    document.getElementById('transfer-confirm').disabled = false;
+  } finally {
+    setModalBusy('transfer-backdrop', false);
   }
+}
+document.getElementById('transfer-confirm').addEventListener('click', ()=>{
+  performTransfer(Number(document.getElementById('transfer-amount').value));
+});
+document.querySelectorAll('#transfer-chips [data-amt]').forEach(btn=>{
+  btn.addEventListener('click', ()=> performTransfer(Number(btn.dataset.amt)));
 });
 
 /* ---------------- tax ---------------- */
 document.getElementById('tax-input').addEventListener('input', (e)=>{
   document.getElementById('tax-btn').disabled = !(Number(e.target.value) > 0);
 });
-document.getElementById('tax-btn').addEventListener('click', async ()=>{
-  const input = document.getElementById('tax-input');
-  const amount = Number(input.value);
+
+async function performTaxPayment(amount){
   if (!amount || amount <= 0) return;
-  const btn = document.getElementById('tax-btn');
-  btn.disabled = true;
+  const input = document.getElementById('tax-input');
+  document.getElementById('tax-btn').disabled = true;
+  document.querySelectorAll('#tax-chips .chip').forEach(b=> b.disabled = true);
   try {
     lastLocalChangeAt = Date.now();
     const { error } = await sb.from('players').update({ money: me.money - amount }).eq('id', me.id);
@@ -903,8 +951,15 @@ document.getElementById('tax-btn').addEventListener('click', async ()=>{
     console.error(e);
     showToast('จ่ายภาษีไม่สำเร็จ');
   } finally {
-    btn.disabled = false;
+    document.getElementById('tax-btn').disabled = false;
+    document.querySelectorAll('#tax-chips .chip').forEach(b=> b.disabled = false);
   }
+}
+document.getElementById('tax-btn').addEventListener('click', ()=>{
+  performTaxPayment(Number(document.getElementById('tax-input').value));
+});
+document.querySelectorAll('#tax-chips [data-amt]').forEach(btn=>{
+  btn.addEventListener('click', ()=> performTaxPayment(Number(btn.dataset.amt)));
 });
 
 /* ---------------- recovery link (prevents getting stranded) ---------------- */
@@ -1029,10 +1084,32 @@ function subscribeRealtime(){
 }
 
 /* =========================================================
+   KEYBOARD-SAFE MODALS
+   Mobile browsers shrink the visual viewport (not the layout viewport)
+   when the on-screen keyboard opens. Fixed-position bottom sheets don't
+   know that, so they can end up positioned behind the keyboard. This
+   keeps every open modal-backdrop sized/pinned to the actual visible area.
+========================================================= */
+function keepModalsAboveKeyboard(){
+  if (!window.visualViewport) return;
+  const vv = window.visualViewport;
+  function adjust(){
+    document.querySelectorAll('.modal-backdrop').forEach(el=>{
+      el.style.height = vv.height + 'px';
+      el.style.top = vv.offsetTop + 'px';
+    });
+  }
+  vv.addEventListener('resize', adjust);
+  vv.addEventListener('scroll', adjust);
+  adjust();
+}
+
+/* =========================================================
    BOOT
 ========================================================= */
 (async function boot(){
   buildSwatches();
+  keepModalsAboveKeyboard();
   await refreshBankerAvailability();
 
   // Recovery link support: open the site with ?pid=<uuid> to relink this device
